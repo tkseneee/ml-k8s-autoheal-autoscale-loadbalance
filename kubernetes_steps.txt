@@ -1,0 +1,77 @@
+#Install docker desktop and enable kubernetes in it
+#Install kubectl
+
+# To map the docker desktop with kubectl (if it is not mapped with default docker desktop kubernetes)
+kubectl config current-context
+kubectl config use-context docker-desktop
+
+#To build and tag the docker app
+docker build -t ml-api .
+docker tag ml-api ml-api:latest
+
+#DEploy it thorugh kubernetes cluster
+kubectl apply -f ml-deployment.yaml
+kubectl apply -f ml-service.yaml
+
+#Check the pod status and port
+kubectl get pods
+kubectl get svc -A # get the port
+
+#Run the application with the test input
+curl -X POST "http://localhost:31426/predict" -H "Content-Type: application/json" -d "{\"features\": [5.1, 3.5, 1.4, 0.2]}"
+
+#Run the following command to create a Horizontal Pod Autoscaler (HPA) that scales when CPU #usage exceeds 50%:
+kubectl delete hpa ml-deployment # delete the deployment as it is running
+kubectl autoscale deployment ml-deployment --cpu-percent=50 --min=1 --max=5
+
+# to verify auto scale
+kubectl get hpa
+
+
+# For load balance update/include ml-service.yaml file as below 
+type: LoadBalancer  #Changed from NodePort to LoadBalancer
+
+kubectl apply -f ml-service.yaml
+
+#Test Auto-Healing
+#Delete a running pod manually:
+
+kubectl delete pod <pod-name>
+
+kubectl get pods  # pod created again
+
+
+# To check load balance
+Run the load_test.py in seperate command window (It creates 5000 request)
+
+# Monitor the pod while this python script is exucuting
+kubectl get pods -w  (run this in another terminal)
+
+# Need to configure kubectl metrics for it
+kubectl get hpa  # will give cpu status
+
+#Stop the service
+kubectl delete deployment ml-deployment
+kubectl delete service ml-service
+
+
+
+
+
+# To enable kubectl metric 
+kubectl get pods -n kube-system | findstr /I "metrics-server"
+
+kubectl logs -n kube-system deployment/metrics-server
+kubectl edit deployment metrics-server -n kube-system
+
+    spec:
+      containers:
+      - args:
+        - --secure-port=4443
+
+#Include tls
+        - --secure-port=4443
+        - --kubelet-insecure-tls   # Add this line
+(Do the same in both if two files opened)
+
+kubectl rollout restart deployment metrics-server -n kube-system
